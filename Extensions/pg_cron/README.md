@@ -1,0 +1,1 @@
+Se pensum her - https://mercantec.notion.site/pgcron

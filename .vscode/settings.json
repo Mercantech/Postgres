@@ -1,0 +1,11 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "localhost",
+            "driver": "PostgreSQL",
+            "name": "TimescaleDB",
+            "connectString": "postgres://tsdbadmin:vdelq1dogn5j8nqs@yrbx1rdiyd.fk2h1wb6gb.tsdb.cloud.timescale.com:31836/tsdb?sslmode=require"
+        }
+    ]
+}
