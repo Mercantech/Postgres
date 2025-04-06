@@ -32,7 +32,7 @@ BEGIN
         p_username,
         crypt(p_password, gen_salt('bf')), -- Bruger Blowfish (bf) til password hashing
         p_email,
-        pgp_sym_encrypt(p_sensitive_data, 'MinHemmeligeNøgle') -- Symmetrisk kryptering af følsomme data
+        pgp_sym_encrypt(p_sensitive_data, 'DenHerMåIkkeVæreOffentlig!') -- Symmetrisk kryptering af følsomme data
     ) RETURNING user_id INTO new_user_id;
     
     RETURN new_user_id;

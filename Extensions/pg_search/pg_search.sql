@@ -1,9 +1,11 @@
 -- @block Først installerer vi de nødvendige extensions
 CREATE EXTENSION IF NOT EXISTS pg_trgm;  -- For trigram matching
 CREATE EXTENSION IF NOT EXISTS unaccent; -- For at håndtere accenter i tekst
+CREATE EXTENSION IF NOT EXISTS pg_search;
+
 
 -- @block Lav en products tabel som eksempel
-CREATE TABLE products (
+CREATE TABLE IF NOT EXISTS products (
     product_id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
@@ -26,6 +28,9 @@ INSERT INTO products (name, description, tags) VALUES
      ARRAY['elektronik', 'computer', 'apple']),
     ('Bose QuietComfort 45', 'Premium støjreducerende hovedtelefoner fra Bose', 
      ARRAY['elektronik', 'lyd', 'hovedtelefoner']);
+
+-- @block Vis alle produkter
+SELECT * FROM products;
 
 -- @block Funktion til fuzzy søgning i produkter
 CREATE OR REPLACE FUNCTION search_products(
@@ -61,6 +66,9 @@ BEGIN
     ORDER BY similarity DESC;
 END;
 $$ LANGUAGE plpgsql;
+
+-- @block Vis om pg_trgm er installeret
+SELECT * FROM search_products('iphone', 0.3);
 
 -- @block Test søgefunktionen med forskellige eksempler
 SELECT * FROM search_products('iphone');
@@ -113,8 +121,8 @@ $$ LANGUAGE plpgsql;
 SELECT * FROM weighted_search_products('mobil');
 SELECT * FROM weighted_search_products('apple produkter');
 
--- Tilføj en materialized view til hurtigere søgning
-CREATE MATERIALIZED VIEW product_search_index AS
+-- First, create the materialized view if it doesn't exist
+CREATE MATERIALIZED VIEW IF NOT EXISTS product_search_index AS
 SELECT 
     product_id,
     name,
@@ -123,9 +131,10 @@ SELECT
     to_tsvector('danish', name || ' ' || description || ' ' || array_to_string(tags, ' ')) as document
 FROM products;
 
-CREATE INDEX idx_product_search ON product_search_index USING GIN (document);
+-- Create the index on the materialized view
+CREATE INDEX IF NOT EXISTS idx_product_search ON product_search_index USING GIN (document);
 
--- Funktion til at søge ved hjælp af full text search
+-- Then recreate the function
 CREATE OR REPLACE FUNCTION fulltext_search_products(
     search_query TEXT
 ) RETURNS TABLE (

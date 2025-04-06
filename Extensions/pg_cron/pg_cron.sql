@@ -119,6 +119,9 @@ $$ LANGUAGE plpgsql;
 -- Kør daglig aggregering hver nat kl. 02:00
 SELECT cron.schedule('daily-sales-aggregation', '0 2 * * *', 'SELECT aggregate_daily_sales()');
 
+-- @block kør hver 10 sekunder
+-- SELECT cron.schedule('every-10-seconds', '*/10 * * * * *', 'SELECT aggregate_daily_sales()');
+
 -- Kør log cleanup hver søndag kl. 03:00
 SELECT cron.schedule('weekly-log-cleanup', '0 3 * * 0', 'SELECT cleanup_old_logs()');
 
