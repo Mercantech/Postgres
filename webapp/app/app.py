@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 import json
+import re
 from typing import Any, Iterable, Literal
 
 import pandas as pd
@@ -171,6 +172,138 @@ def _fetch_df(cur: psycopg.Cursor) -> pd.DataFrame:
     cols = [d.name for d in cur.description] if cur.description else []
     return pd.DataFrame(rows, columns=cols)
 
+
+def _leading_comment_block(stmt: str) -> str | None:
+    """
+    Returnerer en kort, menneskelig forklaring ud fra de første `--`-linjer i statementet.
+    Hvis statementet starter med kommentarer, bruger vi dem som “custom forklaring”.
+    """
+    lines = stmt.strip().splitlines()
+    out: list[str] = []
+    for ln in lines:
+        s = ln.strip()
+        if s == "":
+            if out:
+                # stop ved første tom linje efter kommentar-blok
+                break
+            continue
+        if s.startswith("--"):
+            text = s[2:].strip()
+            if text:
+                out.append(text)
+            continue
+        break
+    if not out:
+        return None
+    return "\n".join(f"- {t}" for t in out)
+
+
+def _extract_name(pattern: str, s: str) -> str | None:
+    m = re.search(pattern, s, flags=re.IGNORECASE)
+    if not m:
+        return None
+    return m.group(1)
+
+
+def _custom_ddl_dml_explain(stmt: str, rowcount: Any) -> str:
+    """
+    Giver en “per-statement” forklaring ved at udlede objektnavne fra SQL’en.
+    Målet er at undgå generiske forklaringer for vores undervisningsdemoer.
+    """
+    s = " ".join(stmt.strip().split())
+
+    ext = _extract_name(r"create\s+extension\s+if\s+not\s+exists\s+([a-zA-Z0-9_]+)", s) or _extract_name(
+        r"create\s+extension\s+([a-zA-Z0-9_]+)", s
+    )
+    if ext:
+        return (
+            f"Slår extensionen **`{ext}`** til i databasen. "
+            "Det gør at nye funktioner/typer/operatører bliver tilgængelige (fx `postgis`, `pg_cron`, `timescaledb`)."
+        )
+
+    tbl = _extract_name(r"create\s+table\s+if\s+not\s+exists\s+([a-zA-Z0-9_]+)", s) or _extract_name(
+        r"create\s+table\s+([a-zA-Z0-9_]+)", s
+    )
+    if tbl:
+        return (
+            f"Opretter tabellen **`{tbl}`** (hvis den ikke findes). "
+            "Her defineres kolonner, datatyper og constraints (fx PRIMARY KEY/UNIQUE), som styrer datakvalitet og relationer."
+        )
+
+    idx = _extract_name(
+        r"create\s+unique\s+index\s+if\s+not\s+exists\s+([a-zA-Z0-9_]+)", s
+    ) or _extract_name(r"create\s+index\s+if\s+not\s+exists\s+([a-zA-Z0-9_]+)", s)
+    if idx:
+        return (
+            f"Opretter indekset **`{idx}`** (hvis det ikke findes). "
+            "Indekset gør bestemte opslag hurtige og er ofte afgørende for performance (fx PostGIS GiST/KNN eller FTS GIN)."
+        )
+
+    view = _extract_name(
+        r"create\s+or\s+replace\s+view\s+([a-zA-Z0-9_]+)", s
+    ) or _extract_name(r"create\s+view\s+if\s+not\s+exists\s+([a-zA-Z0-9_]+)", s)
+    if view:
+        return (
+            f"Opretter view’et **`{view}`**. "
+            "Et view er en navngiven query, som gør det nemmere at genbruge og forklare logik i undervisningen."
+        )
+
+    mview = _extract_name(
+        r"create\s+materialized\s+view\s+if\s+not\s+exists\s+([a-zA-Z0-9_]+)", s
+    )
+    if mview:
+        return (
+            f"Opretter materialized view’et **`{mview}`**. "
+            "Det gemmer resultater fysisk og kan gøre søgning/dashboards meget hurtige (men skal opdateres/refreshes)."
+        )
+
+    fn = _extract_name(
+        r"create\s+or\s+replace\s+function\s+([a-zA-Z0-9_]+)", s
+    ) or _extract_name(r"create\s+function\s+([a-zA-Z0-9_]+)", s)
+    if fn:
+        return (
+            f"Opretter/opdaterer funktionen **`{fn}()`**. "
+            "Funktioner bruges til genbrugelig logik tæt på data (fx validering, søgning eller hjælpe-API’er i SQL)."
+        )
+
+    if re.search(r"^\s*insert\s+into\s+([a-zA-Z0-9_]+)", stmt, flags=re.IGNORECASE | re.MULTILINE):
+        t = _extract_name(r"insert\s+into\s+([a-zA-Z0-9_]+)", s) or "tabel"
+        return (
+            f"Indsætter rækker i **`{t}`**. Rowcount rapporteres som `{rowcount}` (nogle drivers viser `-1` for visse statement-typer). "
+            "I demoer med `ON CONFLICT ... DO NOTHING` kan indsæt blive sprunget over hvis en række allerede findes."
+        )
+
+    if re.search(r"^\s*update\s+([a-zA-Z0-9_]+)", stmt, flags=re.IGNORECASE | re.MULTILINE):
+        t = _extract_name(r"update\s+([a-zA-Z0-9_]+)", s) or "tabel"
+        return f"Opdaterer rækker i **`{t}`**. Rowcount viser hvor mange rækker der blev ændret (her: `{rowcount}`)."
+
+    if re.search(r"^\s*delete\s+from\s+([a-zA-Z0-9_]+)", stmt, flags=re.IGNORECASE | re.MULTILINE):
+        t = _extract_name(r"delete\s+from\s+([a-zA-Z0-9_]+)", s) or "tabel"
+        return f"Sletter rækker fra **`{t}`**. Rowcount viser hvor mange rækker der blev slettet (her: `{rowcount}`)."
+
+    if re.search(r"^\s*alter\s+table\s+([a-zA-Z0-9_]+)", stmt, flags=re.IGNORECASE | re.MULTILINE):
+        t = _extract_name(r"alter\s+table\s+([a-zA-Z0-9_]+)", s) or "tabel"
+        return (
+            f"Ændrer tabellen **`{t}`** (ALTER TABLE). "
+            "Det bruges fx til at slå Timescale compression til eller ændre table-settings uden at genskabe data."
+        )
+
+    if "cron.schedule" in s.lower():
+        return (
+            "Planlægger et `pg_cron` job. Det betyder at databasen selv kører den angivne SQL på et fast schedule "
+            "(godt til batch/vedligehold, men kræver styr på drift og rettigheder)."
+        )
+
+    if stmt.strip().lower().startswith("do $$"):
+        return (
+            "Kører en PL/pgSQL-blok (`DO $$ ... $$`). Vi bruger det i demoerne for at gøre opsætning idempotent "
+            "(fx 'prøv at tilføje en policy; hvis den allerede findes, så ignorer fejlen')."
+        )
+
+    return (
+        "Statementet returnerede ikke en tabel, men udførte en ændring/opsætning i databasen. "
+        f"Rowcount rapporteres som `{rowcount}` (kan være `-1` afhængigt af statement-type/driver)."
+    )
 
 def fetch_rows(sql: str) -> list[tuple[Any, ...]]:
     conn = get_conn()
@@ -415,79 +548,13 @@ def explain_statement(stmt: str, result: dict[str, Any]) -> str:
             "Hvis det er langsomt på store tabeller, så brug `EXPLAIN (ANALYZE, BUFFERS)` for at se planen."
         )
 
-    # DDL/DML: forklar statement-typen mere konkret
-    rowcount = result.get("rowcount")
+    # 1) Hvis statementet selv starter med kommentarer, bruger vi dem som “custom forklaring”
+    comment_explain = _leading_comment_block(stmt)
+    if comment_explain:
+        return f"**Forklaring (fra demo-scriptets kommentarer):**\n{comment_explain}"
 
-    if s.startswith("create extension"):
-        return (
-            "Aktiverer en extension i databasen (gør nye funktioner/typer/indekser tilgængelige). "
-            "Hvis den allerede er aktiveret, sker der typisk ikke noget (ved `IF NOT EXISTS`)."
-        )
-
-    if s.startswith("create table"):
-        return (
-            "Opretter en ny tabel (skema/struktur). "
-            "Det her definerer kolonner, datatyper og constraints (fx PRIMARY KEY/UNIQUE)."
-        )
-
-    if s.startswith("create index") or s.startswith("create unique index"):
-        return (
-            "Opretter et indeks for at gøre bestemte opslag hurtige. "
-            "I PostGIS/FTS/trigram bruges indekser ofte for at gøre søgning/nærmeste-nabo effektiv."
-        )
-
-    if s.startswith("create materialized view"):
-        return (
-            "Opretter en materialized view: et gemt resultat af en query. "
-            "Det kan gøre gentagne forespørgsler meget hurtigere, men skal opdateres (refreshes)."
-        )
-
-    if s.startswith("create view") or s.startswith("create or replace view"):
-        return (
-            "Opretter et view: en gemt query der gør komplekse joins/udregninger nemmere at genbruge og forklare."
-        )
-
-    if "create or replace function" in s or s.startswith("create function"):
-        return (
-            "Opretter/opdaterer en database-funktion (genbrugelig logik tæt på data). "
-            "I demoerne bruger vi det til fx login-verifikation eller hjælpe-queries."
-        )
-
-    if s.startswith("insert into"):
-        return (
-            f"Indsætter data i en tabel. Rowcount viser hvor mange rækker der blev indsat (her: `{rowcount}`). "
-            "Hvis der bruges `ON CONFLICT ... DO NOTHING`, kan nogle rækker blive sprunget over."
-        )
-
-    if s.startswith("update "):
-        return (
-            f"Opdaterer eksisterende rækker. Rowcount viser hvor mange rækker der blev ændret (her: `{rowcount}`)."
-        )
-
-    if s.startswith("delete from"):
-        return (
-            f"Sletter rækker. Rowcount viser hvor mange rækker der blev slettet (her: `{rowcount}`)."
-        )
-
-    if s.startswith("alter table"):
-        return "Ændrer en eksisterende tabel (fx add/drop kolonne, ændre settings, slå compression til osv.)."
-
-    if "cron.schedule" in s:
-        return (
-            "Planlægger et `pg_cron` job. Det betyder at databasen selv kører den angivne SQL på et fast schedule."
-        )
-
-    if s.startswith("do $$"):
-        return (
-            "Kører en lille PL/pgSQL-blok (server-side script). "
-            "Vi bruger det typisk for at gøre opsætning idempotent med `EXCEPTION WHEN OTHERS THEN NULL`."
-        )
-
-    return (
-        "Statementet returnerede ikke en tabel. "
-        "Se `Rowcount` for hvor mange rækker der blev påvirket (nogle kommandoer viser `-1`, hvilket blot betyder "
-        "at driveren ikke rapporterer et præcist antal for den type statement)."
-    )
+    # 2) Ellers laver vi en custom forklaring ud fra statementets konkrete objekter
+    return _custom_ddl_dml_explain(stmt, result.get("rowcount"))
 
 
 def run_statements(stmts: Iterable[str]) -> list[dict[str, Any]]:
