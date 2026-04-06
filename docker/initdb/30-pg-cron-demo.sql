@@ -18,7 +18,8 @@ INSERT INTO sales_data (sale_date, amount)
 SELECT
     NOW() - (random() * interval '30 days'),
     round((random() * 1000)::numeric, 2)
-FROM generate_series(1, 100);
+FROM generate_series(1, 100)
+WHERE NOT EXISTS (SELECT 1 FROM sales_data LIMIT 1);
 
 CREATE OR REPLACE FUNCTION aggregate_daily_sales() RETURNS void AS $$
 DECLARE

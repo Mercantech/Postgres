@@ -18,11 +18,11 @@ PostgreSQL er ikke kun “tabeller og SELECT”. Med **udvidelser** kan Postgres
 
 ### Sådan bruger du det her pensum (hurtigt)
 
-Du kan køre alt i den visuelle web-app.
+Du kan køre alt i den visuelle web-app. Øverst i app’en ligger **Start her** med de tre trin — følg dem første gang.
 
 - **Læs** modulet i venstre side (Pensum)
 - Tryk **Kør demo for dette modul** (så bliver tabeller/views oprettet)
-- Kør de foreslåede SQL-queries i editoren og læs forklaringerne i Resultater
+- Kør de foreslåede SQL-queries i editoren og læs forklaringerne i **Resultater** (inkl. **Graf (auto)** når det giver mening)
 
 Hvis du bruger `psql`, kan du stadig forbinde direkte til databasen (se `01-docker-og-setup.md`).
 

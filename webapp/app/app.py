@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import json
 import re
-from typing import Any, Iterable, Literal
+from typing import Any, Iterable
 
 import pandas as pd
 import psycopg
@@ -557,6 +557,86 @@ def explain_statement(stmt: str, result: dict[str, Any]) -> str:
     return _custom_ddl_dml_explain(stmt, result.get("rowcount"))
 
 
+def render_auto_charts(df: pd.DataFrame) -> None:
+    """Tegn simple grafer når resultat-kolonner matcher kendte demo-mønstre."""
+    if df.empty or len(df) > 400:
+        return
+
+    lc = {str(c).lower(): c for c in df.columns}
+
+    with st.expander("Graf (auto)", expanded=True):
+        try:
+            if "similarity" in lc:
+                lab = lc.get("name") or lc.get("product_id") or lc.get("title")
+                if lab:
+                    st.caption("Trigram-lighed (højere = tættere match)")
+                    st.bar_chart(df[[lab, lc["similarity"]]].set_index(lab))
+                    return
+
+            if "rank" in lc:
+                lab = lc.get("name") or lc.get("product_id") or lc.get("title")
+                if lab:
+                    st.caption("Full text rank (højere = mere relevant)")
+                    st.bar_chart(df[[lab, lc["rank"]]].set_index(lab))
+                    return
+
+            if "distance" in lc and (lc.get("title") or lc.get("name")):
+                lab = lc.get("title") or lc.get("name")
+                if lab:
+                    st.caption("Vektor-afstand (lavere = tættere på query)")
+                    st.bar_chart(df[[lab, lc["distance"]]].set_index(lab))
+                    return
+
+            if "meters_to_cph" in lc and "name" in lc:
+                st.caption("Afstand til København (meter)")
+                ch = df[[lc["name"], lc["meters_to_cph"]]].set_index(lc["name"]).sort_values(lc["meters_to_cph"])
+                st.bar_chart(ch)
+                return
+
+            if "meters" in lc and "name" in lc and "meters_to_cph" not in lc:
+                st.caption("Afstand (meter)")
+                ch = df[[lc["name"], lc["meters"]]].set_index(lc["name"]).sort_values(lc["meters"])
+                st.bar_chart(ch)
+                return
+
+            if "day" in lc and "avg_value" in lc:
+                st.caption("Gennemsnit pr. dag (alle sensorer lagt sammen hvis flere)")
+                sub = df[[lc["day"], lc["avg_value"]]].copy()
+                sub[lc["day"]] = pd.to_datetime(sub[lc["day"]], utc=True, errors="coerce")
+                g = sub.groupby(sub[lc["day"]].dt.tz_convert(None).dt.date, as_index=True)[lc["avg_value"]].mean()
+                st.line_chart(g)
+                return
+
+            if "hour" in lc and "avg_value" in lc and "day" not in lc:
+                st.caption("Gennemsnit pr. time (aggregeret over sensorer)")
+                sub = df[[lc["hour"], lc["avg_value"]]].copy()
+                sub[lc["hour"]] = pd.to_datetime(sub[lc["hour"]], utc=True, errors="coerce")
+                g = sub.groupby(sub[lc["hour"]].dt.tz_convert(None), as_index=True)[lc["avg_value"]].mean()
+                st.line_chart(g)
+                return
+
+            if "bucket" in lc:
+                val_c = lc.get("average_value") or lc.get("avg_value_locf") or lc.get("number_of_rows")
+                if val_c:
+                    st.caption("Udvikling over tid (bucket)")
+                    sub = df[[lc["bucket"], val_c]].copy()
+                    sub[lc["bucket"]] = pd.to_datetime(sub[lc["bucket"]], utc=True, errors="coerce")
+                    sub = sub.sort_values(lc["bucket"]).set_index(lc["bucket"])[val_c]
+                    st.line_chart(sub)
+                    return
+
+            if "job_name" in lc and "affected_rows" in lc and len(df) <= 50:
+                st.caption("Job-log: påvirkede rækker")
+                st.bar_chart(df[[lc["job_name"], lc["affected_rows"]]].set_index(lc["job_name"]))
+                return
+
+            if "sensor_id" in lc and "value" in lc and len(df) <= 200:
+                st.caption("Gennemsnitlig værdi pr. sensor (udsnit)")
+                st.bar_chart(df[[lc["sensor_id"], lc["value"]]].groupby(lc["sensor_id"])[lc["value"]].mean())
+        except Exception:
+            st.caption("Kunne ikke lave auto-graf for dette resultat (dataform eller type).")
+
+
 def run_statements(stmts: Iterable[str]) -> list[dict[str, Any]]:
     conn = get_conn()
     out: list[dict[str, Any]] = []
@@ -602,6 +682,20 @@ st.set_page_config(page_title="Postgres Extensions Demo", layout="wide")
 
 st.title("Postgres Extensions Demo")
 st.caption("Pensum + visuelle demoer: kør SQL live og se resultater med det samme.")
+
+with st.expander("Start her — sådan får du mest ud af demoen", expanded=True):
+    st.markdown(
+        """
+**1. Vælg modul** i **Pensum** (sidebar).
+
+**2. Kør demoen først** med **Kør demo for dette modul** (under *Demo-scripts*).  
+Så oprettes tabeller, views og demo-data. Springer du det over, får du typisk fejl som `relation ... does not exist`.
+
+**3. Kør SQL** i editoren. I **Resultater** får du tabel, **forklaring** og ofte en **Graf (auto)**.
+
+**Ekstra:** Under **PostGIS**-modulet ligger der et **kort** med zoner, ruter og byer.
+        """
+    )
 
 with st.sidebar:
     st.subheader("Pensum")
@@ -735,6 +829,7 @@ with col_right:
 
             if "df" in r:
                 st.dataframe(r["df"], use_container_width=True)
+                render_auto_charts(r["df"])
             else:
                 st.write(f"Rowcount: `{r.get('rowcount')}`")
 

@@ -44,9 +44,16 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Demo-data (kun første init)
-SELECT create_user('alice', 'password123', 'alice@example.com', 'CPR: 123456-7890');
-SELECT create_user('bob', 'securepass456', 'bob@example.com', 'CPR: 098765-4321');
+-- Demo-data (idempotent: kan køres igen uden duplicate-key fejl)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM users WHERE username = 'alice') THEN
+    PERFORM create_user('alice', 'password123', 'alice@example.com', 'CPR: 123456-7890');
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM users WHERE username = 'bob') THEN
+    PERFORM create_user('bob', 'securepass456', 'bob@example.com', 'CPR: 098765-4321');
+  END IF;
+END $$;
 
 SELECT verify_user('alice', 'password123') AS login_success;
 SELECT verify_user('alice', 'wrongPassword') AS login_failure;

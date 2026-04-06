@@ -11,15 +11,20 @@ CREATE INDEX IF NOT EXISTS idx_products_name_trgm ON products USING GIN (name gi
 CREATE INDEX IF NOT EXISTS idx_products_description_trgm ON products USING GIN (description gin_trgm_ops);
 CREATE INDEX IF NOT EXISTS idx_products_tags ON products USING GIN (tags);
 
-INSERT INTO products (name, description, tags) VALUES
+INSERT INTO products (name, description, tags)
+SELECT v.n, v.d, v.t
+FROM (
+  VALUES
     ('iPhone 14 Pro', 'Apples flagskib smartphone med det bedste kamera nogensinde',
-     ARRAY['elektronik', 'mobil', 'apple']),
+     ARRAY['elektronik', 'mobil', 'apple']::text[]),
     ('Samsung Galaxy S23', 'Premium Android-telefon med fantastisk skærm fra Samsung',
-     ARRAY['elektronik', 'mobil', 'samsung']),
+     ARRAY['elektronik', 'mobil', 'samsung']::text[]),
     ('MacBook Air M2', 'Let og kraftfuld laptop med lang batterilevetid fra Apple',
-     ARRAY['elektronik', 'computer', 'apple']),
+     ARRAY['elektronik', 'computer', 'apple']::text[]),
     ('Bose QuietComfort 45', 'Premium støjreducerende hovedtelefoner fra Bose',
-     ARRAY['elektronik', 'lyd', 'hovedtelefoner']);
+     ARRAY['elektronik', 'lyd', 'hovedtelefoner']::text[])
+) AS v(n, d, t)
+WHERE NOT EXISTS (SELECT 1 FROM products p WHERE p.name = v.n);
 
 -- Fuzzy søgning med similarity() (pg_trgm)
 CREATE OR REPLACE FUNCTION search_products(
@@ -70,6 +75,9 @@ SELECT
 FROM products;
 
 CREATE INDEX IF NOT EXISTS idx_product_search ON product_search_index USING GIN (document);
+
+-- Opdatér søgeindeks efter evt. nye rækker (sikkert ved genkørsel af demo)
+REFRESH MATERIALIZED VIEW product_search_index;
 
 CREATE OR REPLACE FUNCTION fulltext_search_products(
     search_query TEXT
