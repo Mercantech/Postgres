@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS places (
   geom GEOGRAPHY(Point, 4326) NOT NULL
 );
 
+-- Hvis tabellen allerede fandtes fra en ældre demo uden UNIQUE(name),
+-- så sikrer vi en unik index, så ON CONFLICT (name) virker.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_places_name ON places (name);
+
 INSERT INTO places (name, geom) VALUES
   ('Aalborg', ST_GeogFromText('POINT(9.9217 57.0488)')),
   ('Aarhus',  ST_GeogFromText('POINT(10.2039 56.1629)')),
@@ -38,6 +42,8 @@ CREATE TABLE IF NOT EXISTS zones (
   geom GEOMETRY(Polygon, 4326) NOT NULL
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS ux_zones_name ON zones (name);
+
 -- To simple demozoner (approx): “Jylland-ish” og “Sjælland-ish”
 INSERT INTO zones (name, geom) VALUES
   (
@@ -58,6 +64,8 @@ CREATE TABLE IF NOT EXISTS routes (
   name TEXT NOT NULL UNIQUE,
   geom GEOMETRY(LineString, 4326) NOT NULL
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_routes_name ON routes (name);
 
 INSERT INTO routes (name, geom) VALUES
   (
