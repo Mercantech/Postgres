@@ -66,18 +66,7 @@ I 2D kender du afstand mellem to punkter — samme tanke i 3D eller 384D:
 - Tæt på hinanden → **lignende** indhold (efter modellens læring).
 - Langt fra hinanden → **forskelligt** indhold.
 
-Her er et **skelet** af idéen (akserne er “abstrakte”; i demoen er det 3 tal):
-
-```text
-        ↑ akse 2 (fx “geografi-tema”)
-        |
-   Geodata ●
-        |        ● Søgning
-        |    ● Postgres
-        +--------------------→ akse 1 (fx “database-tema”)
-```
-
-I vores **rigtige demo** ligger de tre dokumenter som faste 3D-punkter; din **query-vektor** er et nyt punkt — den tekst/række der ligger **tættest** er “mest semantisk lig” i den simple model vi har bygget til øvelsen.
+Akserne er **abstrakte** (i demoen er det tre tal pr. dokument). I **web-appen** under dette modul finder du expanderen **“Embedding-rum (interaktiv 3D + 2D)”**: der kan du rotere et **Plotly-3D-plot**, se samme punkter som et **2D-udsnit**, og sammenligne med den røde **query-vektor** fra SQL-demonen (`[0.85, 0.1, 0.1]`). Den række der ligger **tættest** er “mest semantisk lig” i den simple model vi har bygget til øvelsen.
 
 ---
 

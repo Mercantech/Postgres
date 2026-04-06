@@ -354,6 +354,154 @@ def postgis_layers() -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict
     return places_fc, zones_fc, routes_fc
 
 
+def _parse_vector_literal(val: Any) -> list[float] | None:
+    if val is None:
+        return None
+    if isinstance(val, (list, tuple)):
+        try:
+            return [float(x) for x in val]
+        except (TypeError, ValueError):
+            return None
+    s = str(val).strip()
+    if s.startswith("[") and s.endswith("]"):
+        s = s[1:-1]
+    parts = [p.strip() for p in s.split(",") if p.strip()]
+    try:
+        return [float(p) for p in parts]
+    except ValueError:
+        return None
+
+
+def render_pgvector_space() -> None:
+    import plotly.graph_objects as go
+
+    st.subheader("Rum for embeddings (interaktivt)")
+    st.caption(
+        "Hvert punkt er en **embedding** (her 3 tal). Den røde **Query** matcher demoen i SQL: "
+        "`[0.85, 0.1, 0.1]` — den ligger tættest på *Postgres*. Træk med musen for at rotere 3D-grafen."
+    )
+
+    rows: list[tuple[Any, ...]] = []
+    try:
+        rows = fetch_rows("SELECT title, embedding::text FROM documents ORDER BY doc_id;")
+    except Exception:
+        rows = []
+
+    demo_fallback = [
+        ("Postgres", [0.9, 0.1, 0.1]),
+        ("Søgning", [0.2, 0.9, 0.1]),
+        ("Geodata", [0.1, 0.2, 0.9]),
+    ]
+    labels: list[str] = []
+    xs: list[float] = []
+    ys: list[float] = []
+    zs: list[float] = []
+    if rows:
+        for title, emb in rows:
+            v = _parse_vector_literal(emb)
+            if v and len(v) >= 3:
+                labels.append(str(title))
+                xs.append(v[0])
+                ys.append(v[1])
+                zs.append(v[2])
+    if not labels:
+        for title, v in demo_fallback:
+            labels.append(title)
+            xs.append(v[0])
+            ys.append(v[1])
+            zs.append(v[2])
+
+    qx, qy, qz = 0.85, 0.1, 0.1
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter3d(
+            x=xs,
+            y=ys,
+            z=zs,
+            mode="markers+text",
+            text=labels,
+            textposition="top center",
+            name="Dokumenter",
+            marker=dict(size=11, color="#1565c0", line=dict(width=1, color="#0d47a1")),
+            hovertemplate="<b>%{text}</b><br>dim1=%{x:.2f} dim2=%{y:.2f} dim3=%{z:.2f}<extra></extra>",
+        )
+    )
+    fig.add_trace(
+        go.Scatter3d(
+            x=[qx],
+            y=[qy],
+            z=[qz],
+            mode="markers+text",
+            text=["Query (demo)"],
+            textposition="bottom center",
+            name="Query",
+            marker=dict(size=14, color="#c62828", symbol="diamond", line=dict(width=1, color="white")),
+            hovertemplate="Query<br>dim1=%{x:.2f} dim2=%{y:.2f} dim3=%{z:.2f}<extra></extra>",
+        )
+    )
+    for i in range(len(xs)):
+        fig.add_trace(
+            go.Scatter3d(
+                x=[qx, xs[i]],
+                y=[qy, ys[i]],
+                z=[qz, zs[i]],
+                mode="lines",
+                line=dict(color="rgba(100,100,100,0.35)", width=2),
+                showlegend=False,
+                hoverinfo="skip",
+            )
+        )
+
+    fig.update_layout(
+        template="plotly_white",
+        height=520,
+        margin=dict(l=0, r=0, t=36, b=0),
+        scene=dict(
+            xaxis_title="Dim 1 · fx database-tema",
+            yaxis_title="Dim 2 · fx søgning/tekst",
+            zaxis_title="Dim 3 · fx geografi",
+            bgcolor="rgb(248,250,252)",
+            aspectmode="data",
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
+    fig2 = go.Figure()
+    fig2.add_trace(
+        go.Scatter(
+            x=xs,
+            y=zs,
+            mode="markers+text",
+            text=labels,
+            textposition="top center",
+            name="Dokumenter",
+            marker=dict(size=12, color="#1565c0"),
+        )
+    )
+    fig2.add_trace(
+        go.Scatter(
+            x=[qx],
+            y=[qz],
+            mode="markers+text",
+            text=["Query"],
+            textposition="bottom center",
+            name="Query",
+            marker=dict(size=14, color="#c62828", symbol="diamond"),
+        )
+    )
+    fig2.update_layout(
+        template="plotly_white",
+        height=360,
+        title="2D-udsnit: dim 1 vs dim 3 (samme punkter, fladt kig)",
+        xaxis_title="Dim 1 (fx database)",
+        yaxis_title="Dim 3 (fx geografi)",
+        margin=dict(t=50),
+    )
+    st.plotly_chart(fig2, use_container_width=True)
+
+
 def render_postgis_map() -> None:
     st.subheader("Kort (PostGIS)")
     st.caption("Viser punkter (places), zoner (polygons) og ruter (lines) fra demo-data.")
@@ -812,6 +960,10 @@ with col_left:
         if "postgis" in picked_page.key:
             with st.expander("Vis kort", expanded=True):
                 render_postgis_map()
+
+        if "pgvector" in picked_page.key or "vector" in picked_page.key:
+            with st.expander("Embedding-rum (interaktiv 3D + 2D)", expanded=True):
+                render_pgvector_space()
 
     st.subheader("SQL editor")
     if "sql_text" not in st.session_state:
