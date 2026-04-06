@@ -61,8 +61,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT * FROM search_products('iphone', 0.3);
-SELECT * FROM search_products('telefon', 0.25);
+SELECT * FROM search_products('elektronik', 0.12);
+SELECT * FROM search_products('mobil', 0.12);
 
 -- Full text søgning (dansk)
 CREATE MATERIALIZED VIEW IF NOT EXISTS product_search_index AS
@@ -103,5 +103,5 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-SELECT * FROM fulltext_search_products('apple mobil');
+SELECT * FROM fulltext_search_products('apple OR samsung OR bose');
 

@@ -56,8 +56,10 @@ Init-scriptet `docker/initdb/20-search-demo.sql` viser:
 - materialized view som søgeindeks (`product_search_index`)
 - `fulltext_search_products()` med `websearch_to_tsquery`
 
+**Grafer i web-appen:** Søjlediagrammer giver først mening, når der er **flere rækker** at sammenligne. Demo-queries bruger derfor fx søgetermen `elektronik` (findes i alle tags) og en FTS-query med `OR`, så du kan se forskel på similarity/rank.
+
 Øvelser:
 
-- Prøv at ændre threshold i `search_products()`
+- Prøv at ændre threshold i `search_products()` — hvornår forsvinder rækker (og grafen)?
 - Sammenlign `EXPLAIN` på søgninger med/uden trigram indeks
 - Tilføj flere produkter og se hvordan rank ændrer sig

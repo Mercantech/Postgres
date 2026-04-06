@@ -105,10 +105,14 @@ ORDER BY user_id;
 
     if "soegning" in page_key or "search" in page_key:
         return """\
-SELECT * FROM search_products('iphone', 0.30);
-SELECT * FROM search_products('telefon', 0.25);
+-- Flere rækker: 'elektronik' findes i alle demo-tags (god til sammenligning af similarity)
+SELECT * FROM search_products('elektronik', 0.12);
 
-SELECT * FROM fulltext_search_products('apple mobil');
+-- Flere rækker: 'mobil' rammer typisk flere produkter (navn/beskrivelse/tags)
+SELECT * FROM search_products('mobil', 0.12);
+
+-- Full text: bred query så flere dokumenter kan score (rank sammenlignes bedst med 2+ rækker)
+SELECT * FROM fulltext_search_products('apple OR samsung OR bose');
 """
 
     if "pg-cron" in page_key or "cron" in page_key:
@@ -568,16 +572,27 @@ def render_auto_charts(df: pd.DataFrame) -> None:
         try:
             if "similarity" in lc:
                 lab = lc.get("name") or lc.get("product_id") or lc.get("title")
-                if lab:
+                if lab and len(df) >= 2:
                     st.caption("Trigram-lighed (højere = tættere match)")
                     st.bar_chart(df[[lab, lc["similarity"]]].set_index(lab))
+                    return
+                if lab and len(df) < 2:
+                    st.caption(
+                        "Kun én (eller ingen) række — søjlediagram giver lidt mening. "
+                        "Prøv lavere threshold eller en bredere søgeterm (fx `elektronik`, `mobil`)."
+                    )
                     return
 
             if "rank" in lc:
                 lab = lc.get("name") or lc.get("product_id") or lc.get("title")
-                if lab:
+                if lab and len(df) >= 2:
                     st.caption("Full text rank (højere = mere relevant)")
                     st.bar_chart(df[[lab, lc["rank"]]].set_index(lab))
+                    return
+                if lab and len(df) < 2:
+                    st.caption(
+                        "Kun én (eller ingen) række — prøv en bredere FTS-query (fx `apple OR samsung OR bose`)."
+                    )
                     return
 
             if "distance" in lc and (lc.get("title") or lc.get("name")):
