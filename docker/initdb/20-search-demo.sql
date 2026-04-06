@@ -86,7 +86,7 @@ CREATE OR REPLACE FUNCTION fulltext_search_products(
     name VARCHAR(100),
     description TEXT,
     tags TEXT[],
-    rank FLOAT
+    rank DOUBLE PRECISION
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -95,7 +95,7 @@ BEGIN
         p.name,
         p.description,
         p.tags,
-        ts_rank(psi.document, websearch_to_tsquery('danish', unaccent(search_query))) AS rank
+        ts_rank(psi.document, websearch_to_tsquery('danish', unaccent(search_query)))::double precision AS rank
     FROM product_search_index psi
     JOIN products p ON p.product_id = psi.product_id
     WHERE psi.document @@ websearch_to_tsquery('danish', unaccent(search_query))
