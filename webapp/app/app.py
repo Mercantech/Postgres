@@ -415,9 +415,78 @@ def explain_statement(stmt: str, result: dict[str, Any]) -> str:
             "Hvis det er langsomt på store tabeller, så brug `EXPLAIN (ANALYZE, BUFFERS)` for at se planen."
         )
 
+    # DDL/DML: forklar statement-typen mere konkret
+    rowcount = result.get("rowcount")
+
+    if s.startswith("create extension"):
+        return (
+            "Aktiverer en extension i databasen (gør nye funktioner/typer/indekser tilgængelige). "
+            "Hvis den allerede er aktiveret, sker der typisk ikke noget (ved `IF NOT EXISTS`)."
+        )
+
+    if s.startswith("create table"):
+        return (
+            "Opretter en ny tabel (skema/struktur). "
+            "Det her definerer kolonner, datatyper og constraints (fx PRIMARY KEY/UNIQUE)."
+        )
+
+    if s.startswith("create index") or s.startswith("create unique index"):
+        return (
+            "Opretter et indeks for at gøre bestemte opslag hurtige. "
+            "I PostGIS/FTS/trigram bruges indekser ofte for at gøre søgning/nærmeste-nabo effektiv."
+        )
+
+    if s.startswith("create materialized view"):
+        return (
+            "Opretter en materialized view: et gemt resultat af en query. "
+            "Det kan gøre gentagne forespørgsler meget hurtigere, men skal opdateres (refreshes)."
+        )
+
+    if s.startswith("create view") or s.startswith("create or replace view"):
+        return (
+            "Opretter et view: en gemt query der gør komplekse joins/udregninger nemmere at genbruge og forklare."
+        )
+
+    if "create or replace function" in s or s.startswith("create function"):
+        return (
+            "Opretter/opdaterer en database-funktion (genbrugelig logik tæt på data). "
+            "I demoerne bruger vi det til fx login-verifikation eller hjælpe-queries."
+        )
+
+    if s.startswith("insert into"):
+        return (
+            f"Indsætter data i en tabel. Rowcount viser hvor mange rækker der blev indsat (her: `{rowcount}`). "
+            "Hvis der bruges `ON CONFLICT ... DO NOTHING`, kan nogle rækker blive sprunget over."
+        )
+
+    if s.startswith("update "):
+        return (
+            f"Opdaterer eksisterende rækker. Rowcount viser hvor mange rækker der blev ændret (her: `{rowcount}`)."
+        )
+
+    if s.startswith("delete from"):
+        return (
+            f"Sletter rækker. Rowcount viser hvor mange rækker der blev slettet (her: `{rowcount}`)."
+        )
+
+    if s.startswith("alter table"):
+        return "Ændrer en eksisterende tabel (fx add/drop kolonne, ændre settings, slå compression til osv.)."
+
+    if "cron.schedule" in s:
+        return (
+            "Planlægger et `pg_cron` job. Det betyder at databasen selv kører den angivne SQL på et fast schedule."
+        )
+
+    if s.startswith("do $$"):
+        return (
+            "Kører en lille PL/pgSQL-blok (server-side script). "
+            "Vi bruger det typisk for at gøre opsætning idempotent med `EXCEPTION WHEN OTHERS THEN NULL`."
+        )
+
     return (
-        "Statementet returnerede ikke en tabel (typisk DDL/DML som CREATE/INSERT/UPDATE). "
-        "Se `Rowcount` for hvor mange rækker der blev påvirket."
+        "Statementet returnerede ikke en tabel. "
+        "Se `Rowcount` for hvor mange rækker der blev påvirket (nogle kommandoer viser `-1`, hvilket blot betyder "
+        "at driveren ikke rapporterer et præcist antal for den type statement)."
     )
 
 
