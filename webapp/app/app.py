@@ -338,6 +338,22 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def demo_key_for_page(page_key: str) -> str | None:
+    if "pgcrypto" in page_key:
+        return "pgcrypto"
+    if "soegning" in page_key or "search" in page_key:
+        return "search"
+    if "pg-cron" in page_key or "cron" in page_key:
+        return "pg_cron"
+    if "timescaledb" in page_key:
+        return "timescaledb"
+    if "postgis" in page_key:
+        return "postgis"
+    if "pgvector" in page_key or "vector" in page_key:
+        return "pgvector"
+    return None
+
+
 st.set_page_config(page_title="Postgres Extensions Demo", layout="wide")
 
 st.title("Postgres Extensions Demo")
@@ -373,6 +389,15 @@ with st.sidebar:
         st.warning("Fandt ingen demo SQL-filer. Tjek at /demo-sql er mounted.")
     else:
         picked = st.selectbox("Vælg demo", scripts, format_func=lambda s: s.title)
+        demo_by_key = {s.key: s for s in scripts}
+
+        page_obj: SyllabusPage | None = st.session_state.get("picked_page_obj")
+        auto_key = demo_key_for_page(page_obj.key) if page_obj is not None else None
+        if auto_key is not None and auto_key in demo_by_key:
+            if st.button("Kør demo for dette modul"):
+                st.session_state.auto_run_demo_key = auto_key
+                st.rerun()
+
         run_demo = st.button("Kør valgt demo")
 
 col_left, col_right = st.columns([1.25, 1], gap="large")
@@ -428,6 +453,16 @@ with col_right:
         stmts = split_sql(script_text)
         st.write(f"Kører **{len(stmts)}** statements fra `{picked.path.name}` …")
         results = run_statements(stmts)
+
+    if scripts and st.session_state.get("auto_run_demo_key"):
+        key = st.session_state.get("auto_run_demo_key")
+        match = next((s for s in scripts if s.key == key), None)
+        if match is not None:
+            script_text = read_text(match.path)
+            stmts = split_sql(script_text)
+            st.write(f"Kører **{len(stmts)}** statements fra `{match.path.name}` (auto for modul) …")
+            results = run_statements(stmts)
+        st.session_state.auto_run_demo_key = None
 
     if run_sql:
         stmts = split_sql(sql_text)
