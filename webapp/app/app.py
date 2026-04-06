@@ -40,6 +40,14 @@ def _conninfo() -> str:
     return f"postgresql://{user}:{pw}@{host}:{port}/{db}"
 
 
+def _conninfo_safe() -> str:
+    host = _env("PGHOST", "db")
+    port = _env("PGPORT", "5432")
+    db = _env("PGDATABASE", "demo")
+    user = _env("PGUSER", "postgres")
+    return f"postgresql://{user}:****@{host}:{port}/{db}"
+
+
 @st.cache_resource
 def get_conn() -> psycopg.Connection:
     return psycopg.connect(_conninfo(), autocommit=True)
@@ -69,6 +77,81 @@ def list_syllabus_pages() -> list[SyllabusPage]:
         title = p.stem.replace("-", " ").replace("_", " ")
         pages.append(SyllabusPage(key=key, title=title, path=p))
     return pages
+
+
+def suggested_sql_for_page(page_key: str) -> str:
+    # Kort, “kør-nu” SQL som matcher objekterne fra init-scripts.
+    if page_key.startswith("00") or page_key.startswith("01"):
+        return """\
+SELECT now() AS time, version() AS postgres_version;
+
+SELECT extname, extversion
+FROM pg_extension
+ORDER BY extname;
+"""
+
+    if "pgcrypto" in page_key:
+        return """\
+SELECT verify_user('alice', 'password123') AS login_success;
+SELECT verify_user('alice', 'wrongPassword') AS login_failure;
+
+SELECT user_id, username, email
+FROM users
+ORDER BY user_id;
+"""
+
+    if "soegning" in page_key or "search" in page_key:
+        return """\
+SELECT * FROM search_products('iphone', 0.30);
+SELECT * FROM search_products('telefon', 0.25);
+
+SELECT * FROM fulltext_search_products('apple mobil');
+"""
+
+    if "pg-cron" in page_key or "cron" in page_key:
+        return """\
+SELECT * FROM v_cron_jobs ORDER BY jobid;
+SELECT * FROM v_cron_job_run_details ORDER BY start_time DESC LIMIT 20;
+SELECT * FROM cron_job_logs ORDER BY execution_time DESC LIMIT 20;
+"""
+
+    if "timescaledb" in page_key:
+        return """\
+SELECT count(*) AS total_rows FROM conditions;
+SELECT * FROM v_conditions_weekly;
+
+SELECT *
+FROM conditions_daily_avg
+ORDER BY day DESC, sensor_id
+LIMIT 50;
+"""
+
+    if "postgis" in page_key:
+        return """\
+SELECT * FROM nearest_place(10.0, 56.0);
+
+SELECT name
+FROM places
+ORDER BY geom <-> ST_MakePoint(12.5683, 55.6761)::geography
+LIMIT 3;
+"""
+
+    if "pgvector" in page_key or "vector" in page_key:
+        return """\
+SELECT title, embedding <-> '[0.85, 0.1, 0.1]' AS distance
+FROM documents
+ORDER BY embedding <-> '[0.85, 0.1, 0.1]'
+LIMIT 3;
+"""
+
+    return "SELECT now() AS time, version() AS postgres_version;"
+
+
+def _sync_sql_editor_with_page() -> None:
+    picked: SyllabusPage | None = st.session_state.get("picked_page_obj")
+    if picked is None:
+        return
+    st.session_state.sql_text = suggested_sql_for_page(picked.key)
 
 
 def split_sql(script: str) -> list[str]:
@@ -119,11 +202,19 @@ with st.sidebar:
         st.warning("Fandt ingen pensum-filer. Tjek at /syllabus er mounted.")
         picked_page = None
     else:
-        picked_page = st.selectbox("Vælg modul", pages, format_func=lambda p: p.title)
+        if "picked_page_obj" not in st.session_state:
+            st.session_state.picked_page_obj = pages[0]
+        picked_page = st.selectbox(
+            "Vælg modul",
+            pages,
+            format_func=lambda p: p.title,
+            key="picked_page_obj",
+            on_change=_sync_sql_editor_with_page,
+        )
 
     st.divider()
     st.subheader("Forbindelse")
-    st.code(_conninfo(), language="text")
+    st.code(_conninfo_safe())
     if st.button("Reconnect"):
         get_conn.clear()  # type: ignore[attr-defined]
         st.rerun()
@@ -144,8 +235,18 @@ with col_left:
         st.markdown(read_text(picked_page.path))
 
     st.subheader("SQL editor")
-    default_sql = "SELECT now() AS time, version() AS postgres_version;"
-    sql_text = st.text_area("Skriv SQL (flere statements er OK).", value=default_sql, height=260)
+    if "sql_text" not in st.session_state:
+        st.session_state.sql_text = (
+            suggested_sql_for_page(picked_page.key)
+            if picked_page is not None
+            else "SELECT now() AS time, version() AS postgres_version;"
+        )
+
+    sql_text = st.text_area(
+        "Skriv SQL (flere statements er OK).",
+        key="sql_text",
+        height=260,
+    )
     col_a, col_b = st.columns([1, 1])
     with col_a:
         run_sql = st.button("Kør SQL", type="primary")
