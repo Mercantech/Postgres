@@ -10,6 +10,7 @@ import pandas as pd
 import psycopg
 import sqlparse
 import streamlit as st
+from streamlit_ace import st_ace
 
 
 @dataclass(frozen=True)
@@ -165,6 +166,116 @@ def _fetch_df(cur: psycopg.Cursor) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=cols)
 
 
+def explain_statement(stmt: str, result: dict[str, Any]) -> str:
+    s = " ".join(stmt.strip().split()).lower()
+    ok = result.get("ok") is True
+    if not ok:
+        return (
+            "Dette statement fejlede, så vi stoppede resten af kørslen. "
+            "Læs fejlteksten og sammenlign med SQL’en."
+        )
+
+    if "df" in result:
+        df: pd.DataFrame = result["df"]
+        if df.empty:
+            return (
+                "Statementet kørte OK, men returnerede **0 rækker**. "
+                "Det betyder typisk, at din WHERE/query ikke matchede noget (eller at data ikke findes endnu)."
+            )
+
+    # Kendte “pensum” queries
+    if "select now()" in s and "version()" in s:
+        return (
+            "Viser at forbindelsen virker, samt hvilken Postgres-version containeren kører. "
+            "Det er en god sanity-check før man går i gang."
+        )
+
+    if "from pg_extension" in s:
+        return (
+            "Lister alle installerede extensions i den aktuelle database. "
+            "Det bruges til at bekræfte at fx `pgcrypto`, `pg_cron`, `timescaledb`, `postgis` og `vector` er slået til."
+        )
+
+    if "verify_user" in s:
+        return (
+            "`verify_user()` returnerer **true/false** afhængigt af om password-hash matcher. "
+            "Bemærk: vi sammenligner ved at hashe input med salt/parametre fra det lagrede hash."
+        )
+
+    if "from users" in s:
+        return (
+            "Viser rækker fra `users`. Passwords er **hashet** (kan ikke dekrypteres). "
+            "Følsomme data er **krypteret** (kan dekrypteres med korrekt nøgle)."
+        )
+
+    if "search_products" in s:
+        return (
+            "Fuzzy søgning med `pg_trgm`. Kolonnen `similarity` er en score \(0..1\) hvor højere = mere lignende. "
+            "GIN trigram-indekser gør det hurtigt på større datasæt."
+        )
+
+    if "fulltext_search_products" in s or "websearch_to_tsquery" in s:
+        return (
+            "Full text search (dansk). `rank` er relevansscoren: højere = bedre match. "
+            "Her bruges et tsvector-indeks (GIN) til at gøre søgningen effektiv."
+        )
+
+    if "from v_cron_jobs" in s or "from cron.job" in s:
+        return (
+            "Viser planlagte `pg_cron` jobs. Her kan I se schedule og om job er aktivt. "
+            "Pointen: jobs kører inde i databasen – smart, men kræver styr på rettigheder og drift."
+        )
+
+    if "from v_cron_job_run_details" in s or "from cron.job_run_details" in s:
+        return (
+            "Viser historik for job-kørsler (start/slut, status, evt. fejl). "
+            "Brug det til at forklare “observability”: man skal kunne se om automatisering virker."
+        )
+
+    if "from cron_job_logs" in s:
+        return (
+            "Dette er vores **egen** log-tabel (ikke pg_cron’s). "
+            "Den viser *hvad* vi gjorde (fx aggregering), om det lykkedes, og hvor lang tid det tog."
+        )
+
+    if "from v_conditions_weekly" in s or "time_bucket" in s:
+        return (
+            "TimescaleDB `time_bucket()` grupperer tidsserier i faste intervaller (her 7 dage). "
+            "Det er en standard måde at lave dashboards og aggregeringer på tidsdata."
+        )
+
+    if "from conditions_daily_avg" in s:
+        return (
+            "Dette er en **continuous aggregate**. TimescaleDB vedligeholder aggregerede data løbende, "
+            "så gentagne queries bliver hurtige."
+        )
+
+    if "nearest_place" in s or "st_distance" in s or "<-> st_makepoint" in s:
+        return (
+            "PostGIS “nærmeste-nabo” / afstand. Resultatet viser hvilken by der er tættest på koordinatet, "
+            "og `meters` er distancen i meter (geography-type)."
+        )
+
+    if "embedding <->" in s or "from documents" in s:
+        return (
+            "`pgvector` nearest-neighbor. `distance` er afstanden mellem query-vektor og lagrede embeddings "
+            "(lavere = tættere = mere lignende)."
+        )
+
+    # Generisk forklaring
+    if "df" in result:
+        df = result["df"]
+        return (
+            f"Returnerede **{len(df)} rækker**. Kig på kolonnenavne og værdier for at forstå, hvad query’en matcher. "
+            "Hvis det er langsomt på store tabeller, så brug `EXPLAIN (ANALYZE, BUFFERS)` for at se planen."
+        )
+
+    return (
+        "Statementet returnerede ikke en tabel (typisk DDL/DML som CREATE/INSERT/UPDATE). "
+        "Se `Rowcount` for hvor mange rækker der blev påvirket."
+    )
+
+
 def run_statements(stmts: Iterable[str]) -> list[dict[str, Any]]:
     conn = get_conn()
     out: list[dict[str, Any]] = []
@@ -242,10 +353,17 @@ with col_left:
             else "SELECT now() AS time, version() AS postgres_version;"
         )
 
-    sql_text = st.text_area(
-        "Skriv SQL (flere statements er OK).",
+    sql_text = st_ace(
+        value=st.session_state.sql_text,
+        language="sql",
+        theme="github",
         key="sql_text",
         height=260,
+        font_size=14,
+        tab_size=2,
+        wrap=True,
+        show_gutter=True,
+        auto_update=True,
     )
     col_a, col_b = st.columns([1, 1])
     with col_a:
@@ -287,11 +405,16 @@ with col_right:
             if r["ok"] is False:
                 st.error(f"Fejl ved statement {i}: {r['error']}")
                 st.code(r["sql"], language="sql")
+                with st.expander("Forklaring", expanded=True):
+                    st.markdown(explain_statement(r["sql"], r))
                 break
 
             st.success(f"Statement {i} OK ({r['ms']} ms)")
             with st.expander("Vis SQL", expanded=False):
                 st.code(r["sql"], language="sql")
+
+            with st.expander("Forklaring", expanded=True):
+                st.markdown(explain_statement(r["sql"], r))
 
             if "df" in r:
                 st.dataframe(r["df"], use_container_width=True)
