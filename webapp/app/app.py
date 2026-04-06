@@ -4,12 +4,14 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+import json
+from typing import Any, Iterable, Literal
 
 import pandas as pd
 import psycopg
 import sqlparse
 import streamlit as st
+import pydeck as pdk
 
 
 @dataclass(frozen=True)
@@ -168,6 +170,112 @@ def _fetch_df(cur: psycopg.Cursor) -> pd.DataFrame:
     rows = cur.fetchall()
     cols = [d.name for d in cur.description] if cur.description else []
     return pd.DataFrame(rows, columns=cols)
+
+
+def fetch_rows(sql: str) -> list[tuple[Any, ...]]:
+    conn = get_conn()
+    with conn.cursor() as cur:
+        cur.execute(sql)
+        return cur.fetchall()
+
+
+def _geojson_featurecollection(rows: list[tuple[Any, ...]], id_col: str) -> dict[str, Any]:
+    # rows: (id, name, geojson(json or str))
+    features: list[dict[str, Any]] = []
+    for row in rows:
+        oid, name, gj = row
+        geom = gj if isinstance(gj, dict) else json.loads(gj)
+        features.append(
+            {
+                "type": "Feature",
+                "id": oid,
+                "properties": {"name": name},
+                "geometry": geom,
+            }
+        )
+    return {"type": "FeatureCollection", "features": features, "properties": {"id_col": id_col}}
+
+
+def postgis_layers() -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any] | None]:
+    try:
+        places = fetch_rows("SELECT place_id, name, geojson FROM v_places_geojson;")
+    except Exception:
+        places = []
+    try:
+        zones = fetch_rows("SELECT zone_id, name, geojson FROM v_zones_geojson;")
+    except Exception:
+        zones = []
+    try:
+        routes = fetch_rows("SELECT route_id, name, geojson FROM v_routes_geojson;")
+    except Exception:
+        routes = []
+
+    places_fc = _geojson_featurecollection(places, "place_id") if places else None
+    zones_fc = _geojson_featurecollection(zones, "zone_id") if zones else None
+    routes_fc = _geojson_featurecollection(routes, "route_id") if routes else None
+    return places_fc, zones_fc, routes_fc
+
+
+def render_postgis_map() -> None:
+    st.subheader("Kort (PostGIS)")
+    st.caption("Viser punkter (places), zoner (polygons) og ruter (lines) fra demo-data.")
+
+    places_fc, zones_fc, routes_fc = postgis_layers()
+    if not any([places_fc, zones_fc, routes_fc]):
+        st.warning(
+            "Ingen GeoJSON-layers fundet endnu. Kør PostGIS-demoen (\"Kør demo for dette modul\"), "
+            "så tabeller/views bliver oprettet."
+        )
+        return
+
+    layers: list[pdk.Layer] = []
+    if zones_fc:
+        layers.append(
+            pdk.Layer(
+                "GeoJsonLayer",
+                zones_fc,
+                stroked=True,
+                filled=True,
+                get_fill_color=[255, 140, 0, 50],
+                get_line_color=[255, 140, 0, 180],
+                line_width_min_pixels=2,
+                pickable=True,
+            )
+        )
+    if routes_fc:
+        layers.append(
+            pdk.Layer(
+                "GeoJsonLayer",
+                routes_fc,
+                stroked=True,
+                filled=False,
+                get_line_color=[0, 120, 255, 220],
+                line_width_min_pixels=4,
+                pickable=True,
+            )
+        )
+    if places_fc:
+        layers.append(
+            pdk.Layer(
+                "GeoJsonLayer",
+                places_fc,
+                stroked=True,
+                filled=True,
+                get_fill_color=[0, 200, 140, 180],
+                get_line_color=[0, 120, 90, 220],
+                point_radius_min_pixels=6,
+                pickable=True,
+            )
+        )
+
+    view_state = pdk.ViewState(latitude=56.2, longitude=10.2, zoom=5.5)
+    deck = pdk.Deck(
+        layers=layers,
+        initial_view_state=view_state,
+        tooltip={"text": "{name}"},
+        map_style="mapbox://styles/mapbox/light-v10",
+    )
+    st.pydeck_chart(deck, use_container_width=True)
 
 
 def explain_statement(stmt: str, result: dict[str, Any]) -> str:
@@ -406,6 +514,10 @@ with col_left:
     if picked_page is not None:
         st.subheader("Pensum")
         st.markdown(read_text(picked_page.path))
+
+        if "postgis" in picked_page.key:
+            with st.expander("Vis kort", expanded=True):
+                render_postgis_map()
 
     st.subheader("SQL editor")
     if "sql_text" not in st.session_state:

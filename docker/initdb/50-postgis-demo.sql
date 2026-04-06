@@ -150,6 +150,23 @@ SELECT
 FROM places
 ORDER BY name;
 
+-- GeoJSON output for polygons/lines (klar til kort-layers)
+CREATE OR REPLACE VIEW v_zones_geojson AS
+SELECT
+  zone_id,
+  name,
+  ST_AsGeoJSON(geom)::json AS geojson
+FROM zones
+ORDER BY name;
+
+CREATE OR REPLACE VIEW v_routes_geojson AS
+SELECT
+  route_id,
+  name,
+  ST_AsGeoJSON(geom)::json AS geojson
+FROM routes
+ORDER BY name;
+
 -- H) Nærmeste sted til et punkt (funktion-call)
 SELECT * FROM nearest_place(10.0, 56.0);
 
