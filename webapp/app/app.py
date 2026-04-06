@@ -10,7 +10,6 @@ import pandas as pd
 import psycopg
 import sqlparse
 import streamlit as st
-from streamlit_ace import st_ace
 
 
 @dataclass(frozen=True)
@@ -353,18 +352,15 @@ with col_left:
             else "SELECT now() AS time, version() AS postgres_version;"
         )
 
-    sql_text = st_ace(
-        value=st.session_state.sql_text,
-        language="sql",
-        theme="github",
+    sql_text = st.text_area(
+        "Skriv SQL (flere statements er OK).",
         key="sql_text",
         height=260,
-        font_size=14,
-        tab_size=2,
-        wrap=True,
-        show_gutter=True,
-        auto_update=True,
     )
+
+    show_preview = st.checkbox("Vis SQL med syntax highlighting", value=True)
+    if show_preview:
+        st.code(sql_text, language="sql")
     col_a, col_b = st.columns([1, 1])
     with col_a:
         run_sql = st.button("Kør SQL", type="primary")
