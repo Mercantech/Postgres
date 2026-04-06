@@ -174,6 +174,15 @@ def explain_statement(stmt: str, result: dict[str, Any]) -> str:
     s = " ".join(stmt.strip().split()).lower()
     ok = result.get("ok") is True
     if not ok:
+        err = (result.get("error") or "").lower()
+        if "does not exist" in err and ("relation" in err or "view" in err or "table" in err):
+            return (
+                "Det her fejler fordi objektet (fx view/table) **ikke findes endnu**. "
+                "I vores undervisnings-setup bliver mange demo-objekter oprettet af demo-scriptet.\n\n"
+                "- Løsning i web-appen: vælg den relevante demo i **Demo-scripts** og tryk **Kør valgt demo**\n"
+                "- Alternativt (hvis du forventer at init kører): kør `docker compose down -v` og start igen, "
+                "så init-scripts kører på en frisk database."
+            )
         return (
             "Dette statement fejlede, så vi stoppede resten af kørslen. "
             "Læs fejlteksten og sammenlign med SQL’en."
