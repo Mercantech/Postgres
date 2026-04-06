@@ -25,7 +25,7 @@ Init-scripts kører **første gang** (når data-volume er tomt).
 Standard login:
 
 - **host**: `localhost`
-- **port**: `5432`
+- **port**: `5433`
 - **db**: `demo`
 - **user**: `postgres`
 - **password**: `postgres`
@@ -33,7 +33,7 @@ Standard login:
 Eksempel med `psql`:
 
 ```bash
-psql "postgresql://postgres:postgres@localhost:5432/demo"
+psql "postgresql://postgres:postgres@localhost:5433/demo"
 ```
 
 ### “Jeg vil starte forfra”

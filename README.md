@@ -13,7 +13,7 @@ docker compose up --build
 Forbind:
 
 ```bash
-psql "postgresql://postgres:postgres@localhost:5432/demo"
+psql "postgresql://postgres:postgres@localhost:5433/demo"
 ```
 
 Nulstil alt (kør init-scripts igen):
