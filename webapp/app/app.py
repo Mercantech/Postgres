@@ -12,6 +12,7 @@ import pandas as pd
 import psycopg
 import sqlparse
 import streamlit as st
+import streamlit.components.v1 as components
 import pydeck as pdk
 
 
@@ -677,6 +678,54 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+# Streamlit renderer ikke Mermaid i st.markdown(); vi indlejrer mermaid.js i et iframe.
+_MERMAID_BLOCK = re.compile(r"```mermaid\s*\r?\n(.*?)```", re.DOTALL | re.IGNORECASE)
+
+
+def _render_mermaid_diagram(mermaid_src: str) -> None:
+    safe = json.dumps(mermaid_src.strip(), ensure_ascii=False)
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<style>body{{margin:0;padding:8px;font-family:system-ui,sans-serif;background:#fff;}}</style></head><body>
+<div id="mroot"></div>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.6.1/dist/mermaid.min.js"></script>
+<script>
+(function() {{
+  try {{
+    var graph = {safe};
+    var d = document.createElement("div");
+    d.className = "mermaid";
+    d.textContent = graph;
+    document.getElementById("mroot").appendChild(d);
+    mermaid.initialize({{ startOnLoad: false, theme: "neutral", securityLevel: "loose" }});
+    mermaid.run({{ nodes: [d] }}).catch(function(err) {{
+      document.getElementById("mroot").innerHTML =
+        "<pre style=color:#c00>Kunne ikke tegne Mermaid-diagram. Tjek netværk (CDN) eller syntaks.<br>" +
+        String(err) + "</pre>";
+    }});
+  }} catch (e) {{
+    document.getElementById("mroot").innerHTML = "<pre style=color:#c00>Kunne ikke tegne diagram: " + e + "</pre>";
+  }}
+}})();
+</script></body></html>"""
+    components.html(html, height=400, scrolling=True)
+
+
+def render_markdown_with_mermaid(md: str) -> None:
+    if not _MERMAID_BLOCK.search(md):
+        st.markdown(md)
+        return
+    pos = 0
+    for m in _MERMAID_BLOCK.finditer(md):
+        before = md[pos : m.start()]
+        if before.strip():
+            st.markdown(before)
+        _render_mermaid_diagram(m.group(1))
+        pos = m.end()
+    tail = md[pos:]
+    if tail.strip():
+        st.markdown(tail)
+
+
 def demo_key_for_page(page_key: str) -> str | None:
     if "pgcrypto" in page_key:
         return "pgcrypto"
@@ -758,7 +807,7 @@ col_left, col_right = st.columns([1.25, 1], gap="large")
 with col_left:
     if picked_page is not None:
         st.subheader("Pensum")
-        st.markdown(read_text(picked_page.path))
+        render_markdown_with_mermaid(read_text(picked_page.path))
 
         if "postgis" in picked_page.key:
             with st.expander("Vis kort", expanded=True):
