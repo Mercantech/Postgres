@@ -42,9 +42,6 @@ services:
       SYLLABUS_DIR: /syllabus
     ports:
       - "8501:8501"
-    volumes:
-      - ./docker/initdb:/demo-sql:ro
-      - ./docs:/syllabus:ro
     depends_on:
       db:
         condition: service_healthy
