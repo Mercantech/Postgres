@@ -1,0 +1,52 @@
+services:
+  db:
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    container_name: pg-extensions-demo
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: demo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=timescaledb,pg_cron,pg_stat_statements
+      - -c
+      - cron.database_name=demo
+      - -c
+      - pg_stat_statements.track=all
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build:
+      context: .
+      dockerfile: webapp/Dockerfile
+    container_name: pg-extensions-webapp
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: demo
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DEMO_SQL_DIR: /demo-sql
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./docker/initdb:/demo-sql:ro
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+
