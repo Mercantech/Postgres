@@ -19,6 +19,13 @@ class DemoScript:
     path: Path
 
 
+@dataclass(frozen=True)
+class SyllabusPage:
+    key: str
+    title: str
+    path: Path
+
+
 def _env(name: str, default: str) -> str:
     v = os.getenv(name)
     return v if v is not None and v != "" else default
@@ -49,6 +56,19 @@ def list_demo_scripts() -> list[DemoScript]:
         DemoScript("pgvector", "pgvector (vektor-søgning)", base / "60-pgvector-demo.sql"),
     ]
     return [s for s in scripts if s.path.exists()]
+
+
+def list_syllabus_pages() -> list[SyllabusPage]:
+    base = Path(_env("SYLLABUS_DIR", "/syllabus"))
+    if not base.exists():
+        return []
+
+    pages: list[SyllabusPage] = []
+    for p in sorted(base.glob("*.md")):
+        key = p.stem
+        title = p.stem.replace("-", " ").replace("_", " ")
+        pages.append(SyllabusPage(key=key, title=title, path=p))
+    return pages
 
 
 def split_sql(script: str) -> list[str]:
@@ -90,9 +110,18 @@ def read_text(path: Path) -> str:
 st.set_page_config(page_title="Postgres Extensions Demo", layout="wide")
 
 st.title("Postgres Extensions Demo")
-st.caption("Kør SQL live og tryk på demo-knapper for udvidelser.")
+st.caption("Pensum + visuelle demoer: kør SQL live og se resultater med det samme.")
 
 with st.sidebar:
+    st.subheader("Pensum")
+    pages = list_syllabus_pages()
+    if not pages:
+        st.warning("Fandt ingen pensum-filer. Tjek at /syllabus er mounted.")
+        picked_page = None
+    else:
+        picked_page = st.selectbox("Vælg modul", pages, format_func=lambda p: p.title)
+
+    st.divider()
     st.subheader("Forbindelse")
     st.code(_conninfo(), language="text")
     if st.button("Reconnect"):
@@ -107,9 +136,13 @@ with st.sidebar:
         picked = st.selectbox("Vælg demo", scripts, format_func=lambda s: s.title)
         run_demo = st.button("Kør valgt demo")
 
-col_left, col_right = st.columns([1, 1], gap="large")
+col_left, col_right = st.columns([1.25, 1], gap="large")
 
 with col_left:
+    if picked_page is not None:
+        st.subheader("Pensum")
+        st.markdown(read_text(picked_page.path))
+
     st.subheader("SQL editor")
     default_sql = "SELECT now() AS time, version() AS postgres_version;"
     sql_text = st.text_area("Skriv SQL (flere statements er OK).", value=default_sql, height=260)
