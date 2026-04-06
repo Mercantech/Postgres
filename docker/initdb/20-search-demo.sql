@@ -24,13 +24,13 @@ INSERT INTO products (name, description, tags) VALUES
 -- Fuzzy søgning med similarity() (pg_trgm)
 CREATE OR REPLACE FUNCTION search_products(
     search_term TEXT,
-    similarity_threshold FLOAT DEFAULT 0.3
+    similarity_threshold DOUBLE PRECISION DEFAULT 0.3
 ) RETURNS TABLE (
     product_id INTEGER,
     name VARCHAR(100),
     description TEXT,
     tags TEXT[],
-    similarity FLOAT
+    similarity DOUBLE PRECISION
 ) AS $$
 BEGIN
     RETURN QUERY
@@ -40,17 +40,17 @@ BEGIN
         p.description,
         p.tags,
         GREATEST(
-            similarity(p.name, search_term),
-            similarity(p.description, search_term)
+            similarity(p.name, search_term)::double precision,
+            similarity(p.description, search_term)::double precision
         ) AS similarity
     FROM products p
     WHERE
-        similarity(p.name, search_term) > similarity_threshold
-        OR similarity(p.description, search_term) > similarity_threshold
+        similarity(p.name, search_term)::double precision > similarity_threshold
+        OR similarity(p.description, search_term)::double precision > similarity_threshold
         OR EXISTS (
             SELECT 1
             FROM unnest(p.tags) tag
-            WHERE similarity(tag, search_term) > similarity_threshold
+            WHERE similarity(tag, search_term)::double precision > similarity_threshold
         )
     ORDER BY similarity DESC;
 END;
