@@ -1,6 +1,6 @@
-## Søgning i Postgres: fuzzy, trigram og full text
+## Search
 
-Postgres kan søge på mange niveauer – fra simple `LIKE` til fuzzy matching og “rigtig” full text search.
+Søgning i Postgres på mange niveauer – fra simple `LIKE` til fuzzy matching og “rigtig” full text search.
 
 ### 1) `LIKE` og hvorfor det ofte er dårligt
 
@@ -61,4 +61,3 @@ Init-scriptet `docker/initdb/20-search-demo.sql` viser:
 - Prøv at ændre threshold i `search_products()`
 - Sammenlign `EXPLAIN` på søgninger med/uden trigram indeks
 - Tilføj flere produkter og se hvordan rank ændrer sig
-

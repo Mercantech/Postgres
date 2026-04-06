@@ -30,7 +30,7 @@ Hvis du bruger `psql`, kan du stadig forbinde direkte til databasen (se `01-dock
 
 - **`01-docker-og-setup.md`**: start miljøet, reset volume, verificér extensions.
 - **`02-pgcrypto.md`**: hashing vs kryptering, login-verifikation, følsomme felter.
-- **`03-soegning.md`**: trigram/fuzzy + full text + ranking + indekser.
+- **`03-search.md`**: trigram/fuzzy + full text + ranking + indekser.
 - **`04-pg-cron.md`**: planlagte jobs i DB, logs, drift og faldgruber.
 - **`05-timescaledb.md`**: hypertables, chunk pruning, gapfill, continuous aggregates, policies.
 - **`06-postgis.md`**: points/polygons/lines, afstand, nearest-neighbor, GeoJSON + kort.
