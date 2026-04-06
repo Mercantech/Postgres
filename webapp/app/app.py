@@ -120,20 +120,25 @@ SELECT * FROM cron_job_logs ORDER BY execution_time DESC LIMIT 20;
 SELECT count(*) AS total_rows FROM conditions;
 SELECT * FROM v_conditions_weekly;
 
-SELECT *
-FROM conditions_daily_avg
-ORDER BY day DESC, sensor_id
-LIMIT 50;
+SELECT * FROM v_latest_reading_per_sensor;
+SELECT * FROM v_gapfill_hourly_sensor_1;
+SELECT * FROM v_conditions_chunks;
+
+SELECT * FROM conditions_daily_avg ORDER BY day DESC, sensor_id LIMIT 50;
+SELECT * FROM conditions_hourly_avg ORDER BY hour DESC, sensor_id LIMIT 50;
 """
 
     if "postgis" in page_key:
         return """\
 SELECT * FROM nearest_place(10.0, 56.0);
 
-SELECT name
-FROM places
-ORDER BY geom <-> ST_MakePoint(12.5683, 55.6761)::geography
-LIMIT 3;
+SELECT * FROM v_place_distances_to_cph;
+SELECT * FROM v_places_within_150km_of_cph;
+SELECT * FROM v_places_in_zones;
+SELECT * FROM v_route_zone_intersections;
+
+SELECT * FROM v_route_length_meters;
+SELECT * FROM v_places_geojson LIMIT 5;
 """
 
     if "pgvector" in page_key or "vector" in page_key:
@@ -247,6 +252,30 @@ def explain_statement(stmt: str, result: dict[str, Any]) -> str:
         return (
             "Dette er en **continuous aggregate**. TimescaleDB vedligeholder aggregerede data løbende, "
             "så gentagne queries bliver hurtige."
+        )
+
+    if "from conditions_hourly_avg" in s:
+        return (
+            "Continuous aggregate på time-niveau. Den er god til dashboards, fordi den gemmer "
+            "min/max/gennemsnit og antal pr. time og sensor."
+        )
+
+    if "from v_latest_reading_per_sensor" in s or "distinct on (sensor_id)" in s:
+        return (
+            "Viser **seneste måling pr. sensor** (typisk 'hvad er status lige nu?'). "
+            "Patternet bruger sortering på `(sensor_id, time DESC)` og kan optimeres med et matchende indeks."
+        )
+
+    if "from v_gapfill_hourly_sensor_1" in s or "time_bucket_gapfill" in s:
+        return (
+            "Gapfill laver et **kontinuerligt tids-akse** (her pr. time) og udfylder manglende bucket’s. "
+            "`locf()` betyder 'last observation carried forward' – sidste kendte værdi bæres frem."
+        )
+
+    if "from v_conditions_chunks" in s or "timescaledb_information.chunks" in s:
+        return (
+            "Viser hvilke **chunks** hypertablen består af (range_start/range_end). "
+            "Det er den konkrete mekanik bag performance: queries kan springe hele chunks over (chunk pruning)."
         )
 
     if "nearest_place" in s or "st_distance" in s or "<-> st_makepoint" in s:
