@@ -18,13 +18,6 @@ Du kan forestille dig hvert tal som en **koordinat på en akse**:
 
 I demoen bruger vi **3 dimensioner**, så du kan tegne det som et punkt i et **3D-rum**. I virkelighedens produktion er der ofte **hundreder eller tusindvis** af dimensioner — samme idé, bare umuligt at tegne.
 
-```mermaid
-flowchart LR
-  tekst["Tekst / dokument"]
-  model["Embedding (idé: model)"]
-  v["Vektor: tal₁, tal₂, tal₃, …"]
-  tekst --> model --> v
-```
 
 **Pointe:** En embedding er “adressen” på et stykke indhold i et høj-dimensionelt rum.
 
