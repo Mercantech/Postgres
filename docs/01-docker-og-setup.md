@@ -1,6 +1,6 @@
 ## Docker og setup (hurtig start)
 
-Målet er, at alle elever kan få samme miljø på få minutter – uanset Windows/Mac/Linux.
+Målet er, at du kan få samme miljø som alle andre på få minutter – uanset Windows/Mac/Linux.
 
 ### Forudsætninger
 

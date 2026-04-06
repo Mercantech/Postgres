@@ -51,7 +51,7 @@ Init-scriptet `docker/initdb/50-postgis-demo.sql`:
 - opretter `places` (punkter), `zones` (polygons) og `routes` (lines)
 - indekserer med GiST
 - laver `nearest_place(lon, lat)`
-- laver views der er perfekte til undervisning og “kør og forklar”
+- laver views du kan køre direkte og få et hurtigt overblik
 
 #### Kør disse i web-appen
 

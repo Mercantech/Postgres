@@ -6,7 +6,7 @@
 
 En embedding er en liste af tal (en vektor), som repræsenterer tekst/billeder/ting i et rum, hvor “nærhed” ~ “lighed”.
 
-I praksis kommer embeddings typisk fra en ML-model, men til undervisning kan vi bruge små 3D vektorer for at forstå ideen.
+I praksis kommer embeddings typisk fra en ML-model, men her bruger vi små 3D vektorer, så du kan forstå ideen uden ML først.
 
 ### Distance-mål
 

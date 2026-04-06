@@ -56,7 +56,7 @@ Init-scriptet `docker/initdb/20-search-demo.sql` viser:
 - materialized view som søgeindeks (`product_search_index`)
 - `fulltext_search_products()` med `websearch_to_tsquery`
 
-Øvelser til elever:
+Øvelser:
 
 - Prøv at ændre threshold i `search_products()`
 - Sammenlign `EXPLAIN` på søgninger med/uden trigram indeks

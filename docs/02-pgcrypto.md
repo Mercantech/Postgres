@@ -34,7 +34,7 @@ I demoen gemmes følsomme data som `BYTEA` (binary) og krypteres symmetrisk:
 - **Krypter**: `pgp_sym_encrypt(plaintext, key)`
 - **Dekrypter**: `pgp_sym_decrypt(ciphertext, key)`
 
-Vigtige praksis-pointer til klassen:
+Vigtige praksis-pointer:
 
 - **Nøglen må ikke hardcodes i produktion** (brug KMS/secret manager).
 - Overvej om data overhovedet skal ligge i DB (minimering).
@@ -47,7 +47,7 @@ Init-scriptet `docker/initdb/10-pgcrypto-demo.sql` opretter:
 - `users` tabel med `password_hash` og `sensitive_data`
 - `create_user()` og `verify_user()`
 
-Spørgsmål til elever:
+Spørgsmål du kan svare på:
 
 - Hvorfor er `sensitive_data` `BYTEA`?
 - Hvorfor giver det mening at “hash” passwords men “kryptere” CPR?

@@ -53,7 +53,7 @@ SELECT * FROM v_cron_job_run_details ORDER BY start_time DESC LIMIT 20;
 SELECT * FROM cron_job_logs ORDER BY execution_time DESC LIMIT 20;
 ```
 
-Øvelser til elever:
+Øvelser:
 
 - Skift schedule til hvert 5. minut og forklar forskellen.
 - Tilføj en cleanup-funktion til `cron_job_logs`.
